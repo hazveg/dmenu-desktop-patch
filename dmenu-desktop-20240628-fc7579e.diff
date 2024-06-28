@@ -1,0 +1,82 @@
+From fc7579e852c7d4e9e8a793fa73d2f69ca2435b9d Mon Sep 17 00:00:00 2001
+From: hazveg <133221043+hazveg@users.noreply.github.com>
+Date: Fri, 28 Jun 2024 10:53:23 +0200
+Subject: [PATCH] This patch allows dmenu to use .desktop files from a given
+ list of directories. The directories are defined in dmenu_desktop_path. The
+ name of the Desktop Entry is extracted from the file and a relationship
+ between it and its file is output with format {FILE};{NAME} by
+ dmenu_desktop_name. This is then taken by dmenu_run_desktop; which passes the
+ names into dmenu. The returning string from dmenu is then related back to the
+ file and it is executed. OOTB functionality of dmenu is unaffected.
+
+It is recommended to use with the 'case insensitive' patch.
+---
+ Makefile           |  6 +++++-
+ dmenu_desktop_file |  8 ++++++++
+ dmenu_run_desktop  | 12 ++++++++++++
+ 3 files changed, 25 insertions(+), 1 deletion(-)
+ create mode 100755 dmenu_desktop_file
+ create mode 100755 dmenu_run_desktop
+
+diff --git a/Makefile b/Makefile
+index 458c524..ee5a6b5 100644
+--- a/Makefile
++++ b/Makefile
+@@ -36,10 +36,12 @@ dist: clean
+ 
+ install: all
+ 	mkdir -p $(DESTDIR)$(PREFIX)/bin
+-	cp -f dmenu dmenu_path dmenu_run stest $(DESTDIR)$(PREFIX)/bin
++	cp -f dmenu dmenu_path dmenu_run dmenu_desktop_file dmenu_run_desktop stest $(DESTDIR)$(PREFIX)/bin
+ 	chmod 755 $(DESTDIR)$(PREFIX)/bin/dmenu
+ 	chmod 755 $(DESTDIR)$(PREFIX)/bin/dmenu_path
+ 	chmod 755 $(DESTDIR)$(PREFIX)/bin/dmenu_run
++	chmod 755 $(DESTDIR)$(PREFIX)/bin/dmenu_desktop_file
++	chmod 755 $(DESTDIR)$(PREFIX)/bin/dmenu_run_desktop
+ 	chmod 755 $(DESTDIR)$(PREFIX)/bin/stest
+ 	mkdir -p $(DESTDIR)$(MANPREFIX)/man1
+ 	sed "s/VERSION/$(VERSION)/g" < dmenu.1 > $(DESTDIR)$(MANPREFIX)/man1/dmenu.1
+@@ -51,6 +53,8 @@ uninstall:
+ 	rm -f $(DESTDIR)$(PREFIX)/bin/dmenu\
+ 		$(DESTDIR)$(PREFIX)/bin/dmenu_path\
+ 		$(DESTDIR)$(PREFIX)/bin/dmenu_run\
++		$(DESTDIR)$(PREFIX)/bin/dmenu_desktop_file\
++		$(DESTDIR)$(PREFIX)/bin/dmenu_run_desktop\
+ 		$(DESTDIR)$(PREFIX)/bin/stest\
+ 		$(DESTDIR)$(MANPREFIX)/man1/dmenu.1\
+ 		$(DESTDIR)$(MANPREFIX)/man1/stest.1
+diff --git a/dmenu_desktop_file b/dmenu_desktop_file
+new file mode 100755
+index 0000000..3e048bf
+--- /dev/null
++++ b/dmenu_desktop_file
+@@ -0,0 +1,8 @@
++#!/bin/sh
++
++ls -d /usr/share/applications/* /home/$USER/.local/share/applications/* /var/lib/flatpak/exports/share/applications/* | grep -v '^/.*:$' | grep -v '^$' | while IFS= read -r entry; do
++  if expr "x$entry" : 'x.*.desktop' >/dev/null; then
++    name=$(grep -m 1 '^Name=' "$entry" | cut -d'=' -f2)
++    echo "$entry;$name"
++  fi
++done
+diff --git a/dmenu_run_desktop b/dmenu_run_desktop
+new file mode 100755
+index 0000000..59e520e
+--- /dev/null
++++ b/dmenu_run_desktop
+@@ -0,0 +1,12 @@
++#!/bin/sh
++
++# names=$(dmenu_desktop_path | dmenu_desktop_name)
++names=$(dmenu_desktop_file)
++selected_name=$(echo "$names" | cut -f2 -d";" | dmenu)
++
++echo "$names" | while IFS= read -r correlation; do
++	if [ "$(echo "$correlation" | cut -d ";" -f 2)" = "$selected_name" ]; then
++		gio launch "$(echo "$correlation" | cut -d ";" -f 1)" &
++		exit
++	fi
++done
+-- 
+2.43.0
+
